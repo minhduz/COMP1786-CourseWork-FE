@@ -16,7 +16,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { getStoredUser } from "../../service/api/auth";
 import { deleteHike, getHikeById, Hike } from "../../service/api/hike";
 import {
-  deleteObservation,
   getObservationsByHike,
   Observation,
 } from "../../service/api/observation";
@@ -56,7 +55,7 @@ export default function HikeDetail() {
       setHike(hikeData);
       setObservations(observationsData.observations);
     } catch (error: any) {
-      console.error("Failed to load hike details:", error);
+      console.log("Failed to load hike details:", error);
       if (error.error) {
         Alert.alert("Error", error.error);
       } else {
@@ -96,30 +95,8 @@ export default function HikeDetail() {
     );
   };
 
-  const handleDeleteObservation = (observationId: number) => {
-    Alert.alert(
-      "Delete Observation",
-      "Are you sure you want to delete this observation?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteObservation(observationId);
-              Alert.alert("Success", "Observation deleted");
-              loadData();
-            } catch (error: any) {
-              Alert.alert(
-                "Error",
-                error.error || "Failed to delete observation"
-              );
-            }
-          },
-        },
-      ]
-    );
+  const handleNavigateToUserProfile = (username: string | undefined) => {
+    router.push(`./profile?username=${username}` as any);
   };
 
   const getDifficultyColor = (level: string) => {
@@ -193,6 +170,23 @@ export default function HikeDetail() {
   return (
     <SafeAreaView className="flex-1 bg-white">
       <View className="flex-1">
+        {/* Back Button Header */}
+        <View className="px-4 py-3 border-b border-gray-200">
+          <TouchableOpacity
+            onPress={() => router.back()}
+            className="flex-row items-center"
+          >
+            <MaterialCommunityIcons
+              name="arrow-left"
+              size={24}
+              color="#374151"
+            />
+            <Text className="text-gray-700 font-semibold ml-2 text-base">
+              Back
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         <ScrollView
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -214,18 +208,22 @@ export default function HikeDetail() {
                   <Text className="text-white ml-2">{hike.location}</Text>
                 </View>
 
-                {/* Show creator info if not owner */}
+                {/* Show creator info if not owner - Now clickable */}
                 {!isHikeOwner && hike.username && (
-                  <View className="flex-row items-center mt-1">
+                  <TouchableOpacity
+                    onPress={() => handleNavigateToUserProfile(hike.username!)}
+                    activeOpacity={0.7}
+                    className="flex-row items-center mt-1"
+                  >
                     <MaterialCommunityIcons
                       name="account"
                       size={14}
                       color="white"
                     />
-                    <Text className="text-white/80 text-sm ml-1">
+                    <Text className="text-white/80 text-sm ml-1 underline">
                       by {hike.username}
                     </Text>
-                  </View>
+                  </TouchableOpacity>
                 )}
               </View>
               <View
@@ -456,20 +454,27 @@ export default function HikeDetail() {
                 </View>
               ) : (
                 <View>
-                  {observations.map((observation) => {
-                    // Check if current user is the observation creator
-                    const isObservationOwner =
-                      currentUserId !== null &&
-                      currentUserId === observation.userId;
-
-                    return (
-                      <View
-                        key={observation.observationId}
-                        className="bg-white border border-gray-200 rounded-xl p-4 mb-3"
-                      >
-                        {/* Observation Header */}
+                  {observations.map((observation) => (
+                    <TouchableOpacity
+                      key={observation.observationId}
+                      activeOpacity={0.7}
+                      onPress={() =>
+                        router.push(
+                          `../observation/${observation.observationId}` as any
+                        )
+                      }
+                    >
+                      <View className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
+                        {/* Observation Header - Now clickable */}
                         <View className="flex-row justify-between items-start mb-3">
-                          <View className="flex-row items-center flex-1">
+                          <TouchableOpacity
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              handleNavigateToUserProfile(observation.username);
+                            }}
+                            activeOpacity={0.7}
+                            className="flex-row items-center flex-1"
+                          >
                             <View className="w-10 h-10 bg-blue-100 rounded-full items-center justify-center">
                               {observation.userAvatar ? (
                                 <Image
@@ -487,7 +492,7 @@ export default function HikeDetail() {
                               )}
                             </View>
                             <View className="ml-3 flex-1">
-                              <Text className="text-gray-800 font-semibold">
+                              <Text className="text-gray-800 font-semibold underline">
                                 {observation.username}
                               </Text>
                               <Text className="text-gray-500 text-xs">
@@ -496,7 +501,7 @@ export default function HikeDetail() {
                                 ).toLocaleDateString()}
                               </Text>
                             </View>
-                          </View>
+                          </TouchableOpacity>
 
                           {observation.observationType && (
                             <View className="flex-row items-center">
@@ -533,14 +538,14 @@ export default function HikeDetail() {
                             source={{
                               uri: `${process.env.EXPO_PUBLIC_BASE_URL}${observation.photoUrl}`,
                             }}
-                            className="w-full h-48 rounded-lg mb-3"
+                            className="w-full h-80 rounded-lg mb-3"
                             resizeMode="cover"
                           />
                         )}
 
                         {/* Location Info */}
                         {observation.latitude && observation.longitude && (
-                          <View className="flex-row items-center mb-3">
+                          <View className="flex-row items-center">
                             <MaterialCommunityIcons
                               name="map-marker"
                               size={16}
@@ -552,50 +557,9 @@ export default function HikeDetail() {
                             </Text>
                           </View>
                         )}
-
-                        {/* Action Buttons - Only shown to observation creator */}
-                        {isObservationOwner && (
-                          <View className="flex-row gap-2 border-t border-gray-100 pt-3">
-                            <TouchableOpacity
-                              className="flex-1 bg-blue-50 rounded-lg py-2 flex-row items-center justify-center"
-                              onPress={() =>
-                                router.push(
-                                  `../observation/create-observation?id=${observation.observationId}&hideId=${hikeId}` as any
-                                )
-                              }
-                            >
-                              <MaterialCommunityIcons
-                                name="pencil"
-                                size={16}
-                                color="#2563eb"
-                              />
-                              <Text className="text-blue-600 font-semibold ml-1 text-sm">
-                                Edit
-                              </Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                              className="flex-1 bg-red-50 rounded-lg py-2 flex-row items-center justify-center"
-                              onPress={() =>
-                                handleDeleteObservation(
-                                  observation.observationId
-                                )
-                              }
-                            >
-                              <MaterialCommunityIcons
-                                name="delete"
-                                size={16}
-                                color="#dc2626"
-                              />
-                              <Text className="text-red-600 font-semibold ml-1 text-sm">
-                                Delete
-                              </Text>
-                            </TouchableOpacity>
-                          </View>
-                        )}
                       </View>
-                    );
-                  })}
+                    </TouchableOpacity>
+                  ))}
                 </View>
               )}
             </View>

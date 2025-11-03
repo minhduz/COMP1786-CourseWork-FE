@@ -11,6 +11,7 @@ export interface Observation {
   comments?: string | null;
   observationType?:
     | "Wildlife"
+    | "Landscape"
     | "Vegetation"
     | "Weather"
     | "Trail Condition"
@@ -22,6 +23,8 @@ export interface Observation {
   username?: string;
   userAvatar?: string | null;
   userEmail?: string;
+  hikeName?: string;
+  hikeLocation?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -30,7 +33,7 @@ export interface CreateObservationRequest {
   observation: string;
   observationTime?: string;
   comments?: string;
-  observationType?: "Wildlife" | "Vegetation" | "Weather" | "Trail Condition" | "Other";
+  observationType?: "Wildlife" | "Landscape" | "Vegetation" | "Weather" | "Trail Condition" | "Other";
   latitude?: number;
   longitude?: number;
   photo?: {
@@ -57,7 +60,7 @@ export interface UpdateObservationRequest {
   observation?: string;
   observationTime?: string;
   comments?: string;
-  observationType?: "Wildlife" | "Vegetation" | "Weather" | "Trail Condition" | "Other";
+  observationType?: "Wildlife" | "Landscape" |  "Vegetation" | "Weather" | "Trail Condition" | "Other";
   latitude?: number;
   longitude?: number;
   photo?: {
@@ -80,6 +83,11 @@ export interface GetObservationsByHikeResponse {
   observations: Observation[];
 }
 
+export interface GetMyObservationsResponse {
+  count: number;
+  observations: Observation[];
+}
+
 export interface GetObservationByIdResponse extends Observation {}
 
 export interface ObservationErrorResponse {
@@ -98,7 +106,8 @@ export interface ObservationErrorResponse {
  */
 export const createObservation = async (
   hikeId: number,
-  data: CreateObservationRequest
+  data: CreateObservationRequest,
+  onUploadProgress?: (progress: number) => void
 ): Promise<CreateObservationResponse> => {
   try {
     const formData = new FormData();
@@ -129,6 +138,14 @@ export const createObservation = async (
         headers: {
           "Content-Type": "multipart/form-data",
         },
+        timeout: 120000, // 2 minutes for file uploads
+        onUploadProgress: (progressEvent) => {
+          if (onUploadProgress && progressEvent.total) {
+            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            onUploadProgress(progress);
+            console.log(`📤 Upload progress: ${progress}%`);
+          }
+        },
       }
     );
 
@@ -158,6 +175,20 @@ export const getObservationsByHike = async (
 };
 
 /**
+ * Get all observations created by the authenticated user
+ */
+export const getMyObservations = async (): Promise<GetMyObservationsResponse> => {
+  try {
+    const response = await client.get<GetMyObservationsResponse>(
+      "/hikes/observations/my"
+    );
+    return response.data;
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
  * Get a specific observation by ID
  */
 export const getObservationById = async (
@@ -179,7 +210,8 @@ export const getObservationById = async (
  */
 export const updateObservation = async (
   observationId: number,
-  data: UpdateObservationRequest
+  data: UpdateObservationRequest,
+  onUploadProgress?: (progress: number) => void
 ): Promise<UpdateObservationResponse> => {
   try {
     const formData = new FormData();
@@ -214,6 +246,14 @@ export const updateObservation = async (
         headers: {
           "Content-Type": "multipart/form-data",
         },
+        timeout: 120000, // 2 minutes for file uploads
+        onUploadProgress: (progressEvent) => {
+          if (onUploadProgress && progressEvent.total) {
+            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            onUploadProgress(progress);
+            console.log(`📤 Upload progress: ${progress}%`);
+          }
+        },
       }
     );
 
@@ -247,7 +287,7 @@ export const deleteObservation = async (
  */
 export const getObservationsByType = async (
   hikeId: number,
-  observationType: "Wildlife" | "Vegetation" | "Weather" | "Trail Condition" | "Other"
+  observationType: "Wildlife" | "Landscape" | "Vegetation" | "Weather" | "Trail Condition" | "Other"
 ): Promise<GetObservationsByHikeResponse> => {
   try {
     const allObservations = await getObservationsByHike(hikeId);
@@ -321,6 +361,7 @@ export const getObservationStatistics = async (
   withLocation: number;
   typeBreakdown: {
     Wildlife: number;
+    Landscape: number;
     Vegetation: number;
     Weather: number;
     "Trail Condition": number;
@@ -345,6 +386,7 @@ export const getObservationStatistics = async (
 
     const typeBreakdown = {
       Wildlife: 0,
+      Landscape: 0,
       Vegetation: 0,
       Weather: 0,
       "Trail Condition": 0,
@@ -373,6 +415,7 @@ export const getObservationStatistics = async (
 
 /**
  * Get user's own observations across all hikes
+ * @deprecated Use getMyObservations() instead for better performance
  */
 export const getUserObservations = async (
   userId: number,

@@ -7,7 +7,7 @@ const API_BASE_URL =
 // Create axios instance
 const client: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 30000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -21,9 +21,8 @@ client.interceptors.request.use(
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
-
     } catch (error) {
-      console.error("Error retrieving token:", error);
+      console.log("Error retrieving token:", error);
     }
     return config;
   },
@@ -41,20 +40,24 @@ client.interceptors.response.use(
     return response;
   },
   async (error: AxiosError) => {
-    // Log detailed error information
-    console.error("======================");
-    console.error("[API Error]:", error.config?.method?.toUpperCase(), error.config?.url);
-    console.error("[Status Code]:", error.response?.status);
-    console.error("[Error Data]:", error.response?.data);
-    console.error("[Error Message]:", error.message);
-    console.error("======================");
+    // Prevent the error from being logged to console which triggers Expo error overlay
+    // Only log in development for debugging
+    if (__DEV__) {
+      console.log("======================");
+      console.log("[API Error]:", error.config?.method?.toUpperCase(), error.config?.url);
+      console.log("[Status Code]:", error.response?.status);
+      console.log("[Error Data]:", error.response?.data);
+      console.log("======================");
+    }
 
     // Handle 401 unauthorized
     if (error.response?.status === 401) {
       try {
         await AsyncStorage.removeItem("authToken");
         await AsyncStorage.removeItem("user");
-        console.log("[Auth] Token cleared due to 401");
+        if (__DEV__) {
+          console.log("[Auth] Token cleared due to 401");
+        }
       } catch (err) {
         console.error("Error clearing token:", err);
       }

@@ -84,7 +84,7 @@ const SignInScreen = () => {
       // Navigate to home screen using expo-router
       router.replace("/(tabs)");
     } catch (error: any) {
-      console.error("Sign in error:", error);
+      console.log("Sign in error:", error);
 
       // Handle different error formats
       if (error.errors && Array.isArray(error.errors)) {

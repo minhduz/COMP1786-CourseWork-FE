@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -17,17 +17,23 @@ import {
   changePassword,
   getProfile,
   GetProfileResponse,
+  getUserByUsername,
+  logout,
   updateProfile,
 } from "../../service/api/auth";
-import { getAvatarUrl } from "../../service/utils/url"; // Add this import
+import { clearAuthData } from "../../service/utils/auth-utils";
+import { getAvatarUrl } from "../../service/utils/url";
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { username } = useLocalSearchParams<{ username?: string }>();
+
   const [user, setUser] = useState<GetProfileResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [isOwnProfile, setIsOwnProfile] = useState(true);
 
   // Edit form state
   const [editEmail, setEditEmail] = useState("");
@@ -44,19 +50,45 @@ export default function ProfileScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
+      // Reset all states when the screen is focused
+      resetStates();
       loadProfile();
-    }, [])
+    }, [username])
   );
+
+  const resetStates = () => {
+    setEditMode(false);
+    setShowPasswordChange(false);
+    setSelectedAvatar(null);
+    setEditEmail("");
+    setEditPhone("");
+    setOldPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setShowOldPassword(false);
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
+  };
 
   const loadProfile = async () => {
     try {
       setLoading(true);
-      const profile = await getProfile();
-      setUser(profile);
-      setEditEmail(profile.email);
-      setEditPhone(profile.phone || "");
+
+      // If username is provided in params, fetch that user's profile (public view)
+      if (username) {
+        const profile = await getUserByUsername(username as string);
+        setUser(profile);
+        setIsOwnProfile(false);
+      } else {
+        // Otherwise, fetch the authenticated user's own profile
+        const profile = await getProfile();
+        setUser(profile);
+        setIsOwnProfile(true);
+        setEditEmail(profile.email);
+        setEditPhone(profile.phone || "");
+      }
     } catch (error) {
-      console.error("Failed to load profile:", error);
+      console.log("Failed to load profile:", error);
       Alert.alert("Error", "Failed to load profile");
     } finally {
       setLoading(false);
@@ -66,12 +98,12 @@ export default function ProfileScreen() {
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
     loadProfile().then(() => setRefreshing(false));
-  }, []);
+  }, [username]);
 
   const handlePickAvatar = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.7,
@@ -107,7 +139,27 @@ export default function ProfileScreen() {
       setSelectedAvatar(null);
       loadProfile();
     } catch (error: any) {
-      Alert.alert("Error", error.error || "Failed to update profile");
+      console.log("Update profile error:", error);
+
+      // Handle validation errors
+      if (error.errors && Array.isArray(error.errors)) {
+        const errorMessages = error.errors
+          .map((err: any) => err.msg)
+          .join("\n");
+        Alert.alert("Error", errorMessages);
+      }
+      // Handle single error message
+      else if (error.error) {
+        Alert.alert("Error", error.error);
+      }
+      // Handle other error types
+      else if (error.message) {
+        Alert.alert("Error", error.message);
+      }
+      // Fallback error message
+      else {
+        Alert.alert("Error", "Failed to update profile");
+      }
     } finally {
       setLoading(false);
     }
@@ -116,6 +168,11 @@ export default function ProfileScreen() {
   const handleChangePassword = async () => {
     if (newPassword !== confirmPassword) {
       Alert.alert("Error", "Passwords do not match");
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      Alert.alert("Error", "New password must be at least 8 characters");
       return;
     }
 
@@ -132,10 +189,53 @@ export default function ProfileScreen() {
       setNewPassword("");
       setConfirmPassword("");
     } catch (error: any) {
-      Alert.alert("Error", error.error || "Failed to change password");
+      console.log("Change password error:", error);
+
+      // Handle validation errors
+      if (error.errors && Array.isArray(error.errors)) {
+        const errorMessages = error.errors
+          .map((err: any) => err.msg)
+          .join("\n");
+        Alert.alert("Error", errorMessages);
+      }
+      // Handle single error message
+      else if (error.error) {
+        Alert.alert("Error", error.error);
+      }
+      // Handle other error types
+      else if (error.message) {
+        Alert.alert("Error", error.message);
+      }
+      // Fallback error message
+      else {
+        Alert.alert("Error", "Failed to change password");
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleLogout = async () => {
+    Alert.alert("Logout", "Are you sure you want to logout?", [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Logout",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await logout();
+            await clearAuthData();
+            router.replace("/(auth)/signin");
+          } catch (error) {
+            console.log("Logout error:", error);
+            Alert.alert("Error", "Failed to logout");
+          }
+        },
+      },
+    ]);
   };
 
   // Get the full avatar URL
@@ -157,7 +257,7 @@ export default function ProfileScreen() {
       }
     >
       <View className="px-6 py-8">
-        {/* Profile Header */}
+        {/* Profile Header - Shown for both own and other profiles */}
         {!editMode && !showPasswordChange && (
           <>
             {/* Avatar */}
@@ -179,9 +279,14 @@ export default function ProfileScreen() {
               <Text className="text-2xl font-bold text-gray-800">
                 {user?.username}
               </Text>
+              {!isOwnProfile && (
+                <Text className="text-gray-500 text-sm mt-1">
+                  Public Profile
+                </Text>
+              )}
             </View>
 
-            {/* Profile Info */}
+            {/* Profile Info - Now shows email and phone for both own and other profiles */}
             <View className="bg-gray-50 rounded-lg p-6 mb-6">
               <View className="mb-4">
                 <Text className="text-gray-500 text-sm font-semibold mb-1">
@@ -209,41 +314,75 @@ export default function ProfileScreen() {
               </View>
             </View>
 
-            {/* Action Buttons */}
-            <TouchableOpacity
-              className="bg-blue-600 rounded-lg px-4 py-3 mb-3 flex-row items-center justify-center"
-              onPress={() => setEditMode(true)}
-            >
-              <MaterialCommunityIcons
-                name="pencil-outline"
-                size={20}
-                color="white"
-                style={{ marginRight: 8 }}
-              />
-              <Text className="text-white font-bold text-base">
-                Edit Profile
-              </Text>
-            </TouchableOpacity>
+            {/* Action Buttons - Only show for own profile */}
+            {isOwnProfile && (
+              <>
+                <TouchableOpacity
+                  className="bg-blue-600 rounded-lg px-4 py-3 mb-3 flex-row items-center justify-center"
+                  onPress={() => setEditMode(true)}
+                >
+                  <MaterialCommunityIcons
+                    name="pencil-outline"
+                    size={20}
+                    color="white"
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text className="text-white font-bold text-base">
+                    Edit Profile
+                  </Text>
+                </TouchableOpacity>
 
-            <TouchableOpacity
-              className="bg-orange-600 rounded-lg px-4 py-3 flex-row items-center justify-center"
-              onPress={() => setShowPasswordChange(true)}
-            >
-              <MaterialCommunityIcons
-                name="lock-outline"
-                size={20}
-                color="white"
-                style={{ marginRight: 8 }}
-              />
-              <Text className="text-white font-bold text-base">
-                Change Password
-              </Text>
-            </TouchableOpacity>
+                <TouchableOpacity
+                  className="bg-orange-600 rounded-lg px-4 py-3 mb-3 flex-row items-center justify-center"
+                  onPress={() => setShowPasswordChange(true)}
+                >
+                  <MaterialCommunityIcons
+                    name="lock-outline"
+                    size={20}
+                    color="white"
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text className="text-white font-bold text-base">
+                    Change Password
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Logout Button */}
+                <TouchableOpacity
+                  className="bg-red-600 rounded-lg px-4 py-3 flex-row items-center justify-center"
+                  onPress={handleLogout}
+                >
+                  <MaterialCommunityIcons
+                    name="logout"
+                    size={20}
+                    color="white"
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text className="text-white font-bold text-base">Logout</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {/* Back Button - Show for other users' profiles */}
+            {!isOwnProfile && (
+              <TouchableOpacity
+                className="bg-gray-600 rounded-lg px-4 py-3 flex-row items-center justify-center"
+                onPress={() => router.back()}
+              >
+                <MaterialCommunityIcons
+                  name="arrow-left"
+                  size={20}
+                  color="white"
+                  style={{ marginRight: 8 }}
+                />
+                <Text className="text-white font-bold text-base">Go Back</Text>
+              </TouchableOpacity>
+            )}
           </>
         )}
 
-        {/* Edit Mode */}
-        {editMode && !showPasswordChange && (
+        {/* Edit Mode - Only available for own profile */}
+        {editMode && !showPasswordChange && isOwnProfile && (
           <>
             <Text className="text-2xl font-bold text-gray-800 mb-6">
               Edit Profile
@@ -332,8 +471,8 @@ export default function ProfileScreen() {
           </>
         )}
 
-        {/* Password Change Mode */}
-        {showPasswordChange && !editMode && (
+        {/* Password Change Mode - Only available for own profile */}
+        {showPasswordChange && !editMode && isOwnProfile && (
           <>
             <Text className="text-2xl font-bold text-gray-800 mb-6">
               Change Password

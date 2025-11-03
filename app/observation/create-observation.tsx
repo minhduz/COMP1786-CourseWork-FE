@@ -1,6 +1,8 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
+import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -8,6 +10,7 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   Text,
@@ -15,6 +18,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+
+import MapView, { Marker } from "react-native-maps";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   createObservation,
@@ -23,6 +28,11 @@ import {
   updateObservation,
   UpdateObservationRequest,
 } from "../../service/api/observation";
+
+interface LocationData {
+  latitude: number;
+  longitude: number;
+}
 
 export default function CreateObservationForm() {
   const router = useRouter();
@@ -34,6 +44,7 @@ export default function CreateObservationForm() {
   // Form state
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(isEditMode);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [observation, setObservation] = useState("");
   const [observationTime, setObservationTime] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -41,6 +52,7 @@ export default function CreateObservationForm() {
   const [comments, setComments] = useState("");
   const [observationType, setObservationType] = useState<
     | "Wildlife"
+    | "Landscape"
     | "Vegetation"
     | "Weather"
     | "Trail Condition"
@@ -55,7 +67,19 @@ export default function CreateObservationForm() {
     name: string;
   } | null>(null);
   const [existingPhotoUrl, setExistingPhotoUrl] = useState<string | null>(null);
-  const [shouldDeletePhoto, setShouldDeletePhoto] = useState(false); // ✅ ADDED
+  const [shouldDeletePhoto, setShouldDeletePhoto] = useState(false);
+  const [isCompressing, setIsCompressing] = useState(false);
+
+  // Map state
+  const [showMapPicker, setShowMapPicker] = useState(false);
+  const [mapRegion, setMapRegion] = useState({
+    latitude: 21.0285, // Default to Hanoi
+    longitude: 105.8542,
+    latitudeDelta: 0.0922,
+    longitudeDelta: 0.0421,
+  });
+  const [tempMarker, setTempMarker] = useState<LocationData | null>(null);
+  const [gettingLocation, setGettingLocation] = useState(false);
 
   // Load observation data if editing
   useEffect(() => {
@@ -77,8 +101,18 @@ export default function CreateObservationForm() {
       setLatitude(obs.latitude?.toString() || "");
       setLongitude(obs.longitude?.toString() || "");
       setExistingPhotoUrl(obs.photoUrl || null);
+
+      // Update map region if coordinates exist
+      if (obs.latitude && obs.longitude) {
+        setMapRegion({
+          latitude: obs.latitude,
+          longitude: obs.longitude,
+          latitudeDelta: 0.0922,
+          longitudeDelta: 0.0421,
+        });
+      }
     } catch (error: any) {
-      console.error("Failed to load observation:", error);
+      console.log("Failed to load observation:", error);
       Alert.alert("Error", "Failed to load observation details");
       router.back();
     } finally {
@@ -107,6 +141,113 @@ export default function CreateObservationForm() {
     }
   };
 
+  const handleMapPress = (event: any) => {
+    const coordinate = event.nativeEvent.coordinate;
+    setTempMarker(coordinate);
+  };
+
+  const confirmMapLocation = () => {
+    if (tempMarker) {
+      setLatitude(tempMarker.latitude.toFixed(6));
+      setLongitude(tempMarker.longitude.toFixed(6));
+      setShowMapPicker(false);
+      setTempMarker(null);
+    } else {
+      Alert.alert("Error", "Please tap on the map to select a location");
+    }
+  };
+
+  const getCurrentLocation = async () => {
+    try {
+      setGettingLocation(true);
+
+      // Request permission
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission Required",
+          "Please grant location permission to use this feature"
+        );
+        return;
+      }
+
+      // Get current location
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      setLatitude(location.coords.latitude.toFixed(6));
+      setLongitude(location.coords.longitude.toFixed(6));
+
+      // Update map region
+      setMapRegion({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        latitudeDelta: 0.0922,
+        longitudeDelta: 0.0421,
+      });
+
+      Alert.alert("Success", "Current location captured!");
+    } catch (error) {
+      console.log("Error getting location:", error);
+      Alert.alert("Error", "Failed to get current location");
+    } finally {
+      setGettingLocation(false);
+    }
+  };
+
+  const clearLocation = () => {
+    setLatitude("");
+    setLongitude("");
+  };
+
+  const openMapPicker = () => {
+    // If coordinates exist, center map on them
+    if (latitude && longitude) {
+      const lat = parseFloat(latitude);
+      const lon = parseFloat(longitude);
+      if (!isNaN(lat) && !isNaN(lon)) {
+        setMapRegion({
+          latitude: lat,
+          longitude: lon,
+          latitudeDelta: 0.0922,
+          longitudeDelta: 0.0421,
+        });
+        setTempMarker({ latitude: lat, longitude: lon });
+      }
+    }
+    setShowMapPicker(true);
+  };
+
+  /**
+   * Compress image to reduce file size and upload time
+   * Resizes to max 1920px width and compresses to 70% quality
+   */
+  const compressImage = async (uri: string) => {
+    try {
+      setIsCompressing(true);
+      console.log("📦 Starting image compression...");
+
+      // Resize to max 1920x1920 and compress to 70% quality
+      const manipulatedImage = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 1920 } }], // Maintains aspect ratio
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+      );
+
+      console.log("✅ Image compressed successfully");
+      console.log("   Original URI:", uri);
+      console.log("   Compressed URI:", manipulatedImage.uri);
+
+      return manipulatedImage;
+    } catch (error) {
+      console.log("⚠️ Compression failed, using original:", error);
+      return { uri }; // Fallback to original if compression fails
+    } finally {
+      setIsCompressing(false);
+    }
+  };
+
   const pickImage = async () => {
     try {
       // Request permission
@@ -124,23 +265,27 @@ export default function CreateObservationForm() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
         allowsEditing: true,
-        aspect: [4, 3],
+        aspect: [5, 4],
         quality: 0.8,
       });
 
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
+
+        // Compress the image
+        const compressedImage = await compressImage(asset.uri);
+
         setPhoto({
-          uri: asset.uri,
+          uri: compressedImage.uri,
           type: "image/jpeg",
           name: `observation_${Date.now()}.jpg`,
         });
         // Clear existing photo URL when new photo is selected
         setExistingPhotoUrl(null);
-        setShouldDeletePhoto(false); // ✅ ADDED - Reset delete flag
+        setShouldDeletePhoto(false);
       }
     } catch (error) {
-      console.error("Error picking image:", error);
+      console.log("Error picking image:", error);
       Alert.alert("Error", "Failed to pick image");
     }
   };
@@ -166,17 +311,21 @@ export default function CreateObservationForm() {
 
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
+
+        // Compress the image
+        const compressedImage = await compressImage(asset.uri);
+
         setPhoto({
-          uri: asset.uri,
+          uri: compressedImage.uri,
           type: "image/jpeg",
           name: `observation_${Date.now()}.jpg`,
         });
         // Clear existing photo URL when new photo is taken
         setExistingPhotoUrl(null);
-        setShouldDeletePhoto(false); // ✅ ADDED - Reset delete flag
+        setShouldDeletePhoto(false);
       }
     } catch (error) {
-      console.error("Error taking photo:", error);
+      console.log("Error taking photo:", error);
       Alert.alert("Error", "Failed to take photo");
     }
   };
@@ -184,7 +333,7 @@ export default function CreateObservationForm() {
   const removePhoto = () => {
     setPhoto(null);
     setExistingPhotoUrl(null);
-    setShouldDeletePhoto(true); // ✅ ADDED - Mark for deletion
+    setShouldDeletePhoto(true);
   };
 
   const showPhotoOptions = () => {
@@ -246,15 +395,15 @@ export default function CreateObservationForm() {
 
     try {
       setLoading(true);
+      setUploadProgress(0);
 
       if (isEditMode && observationId) {
-        // ✅ UPDATED - Handle photo deletion logic
+        // Update existing observation
         console.log("📝 Updating observation...");
         console.log("  - shouldDeletePhoto:", shouldDeletePhoto);
         console.log("  - photo:", photo);
         console.log("  - existingPhotoUrl:", existingPhotoUrl);
 
-        // Update existing observation
         const updateData: UpdateObservationRequest = {
           observation: observation.trim(),
           observationTime: observationTime.toISOString(),
@@ -277,7 +426,10 @@ export default function CreateObservationForm() {
           console.log("📷 No photo changes");
         }
 
-        await updateObservation(observationId, updateData);
+        await updateObservation(observationId, updateData, (progress) => {
+          setUploadProgress(progress);
+        });
+
         Alert.alert("Success", "Observation updated successfully", [
           {
             text: "OK",
@@ -296,7 +448,10 @@ export default function CreateObservationForm() {
           photo: photo || undefined,
         };
 
-        await createObservation(hikeId!, observationData);
+        await createObservation(hikeId!, observationData, (progress) => {
+          setUploadProgress(progress);
+        });
+
         Alert.alert("Success", "Observation created successfully", [
           {
             text: "OK",
@@ -305,7 +460,7 @@ export default function CreateObservationForm() {
         ]);
       }
     } catch (error: any) {
-      console.error("Failed to save observation:", error);
+      console.log("Failed to save observation:", error);
       if (error.errors) {
         const errorMessages = error.errors.map((e: any) => e.msg).join("\n");
         Alert.alert("Validation Error", errorMessages);
@@ -316,6 +471,7 @@ export default function CreateObservationForm() {
       }
     } finally {
       setLoading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -396,6 +552,7 @@ export default function CreateObservationForm() {
                 {(
                   [
                     "Wildlife",
+                    "Landscape",
                     "Vegetation",
                     "Weather",
                     "Trail Condition",
@@ -503,11 +660,49 @@ export default function CreateObservationForm() {
               />
             </View>
 
-            {/* Location Coordinates */}
+            {/* Location with Map and GPS Options */}
             <View className="mb-4">
               <Text className="text-gray-700 font-semibold mb-2">
                 Location (Optional)
               </Text>
+
+              {/* Location Action Buttons */}
+              <View className="flex-row gap-2 mb-3">
+                <TouchableOpacity
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 flex-row items-center justify-center bg-gray-50"
+                  onPress={getCurrentLocation}
+                  disabled={gettingLocation}
+                >
+                  {gettingLocation ? (
+                    <ActivityIndicator size="small" color="#2563eb" />
+                  ) : (
+                    <MaterialCommunityIcons
+                      name="crosshairs-gps"
+                      size={18}
+                      color="#2563eb"
+                    />
+                  )}
+                  <Text className="text-blue-600 font-semibold ml-2 text-sm">
+                    Current Location
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 flex-row items-center justify-center bg-gray-50"
+                  onPress={openMapPicker}
+                >
+                  <MaterialCommunityIcons
+                    name="map-marker"
+                    size={18}
+                    color="#2563eb"
+                  />
+                  <Text className="text-blue-600 font-semibold ml-2 text-sm">
+                    Pick from Map
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Coordinate Inputs */}
               <View className="flex-row gap-2">
                 <View className="flex-1">
                   <Text className="text-gray-600 text-xs mb-1">Latitude</Text>
@@ -530,8 +725,31 @@ export default function CreateObservationForm() {
                   />
                 </View>
               </View>
+
+              {/* Location Status */}
+              {latitude && longitude && (
+                <View className="flex-row items-center justify-between mt-2 bg-blue-50 px-3 py-2 rounded-lg">
+                  <View className="flex-row items-center flex-1">
+                    <MaterialCommunityIcons
+                      name="map-marker-check"
+                      size={16}
+                      color="#2563eb"
+                    />
+                    <Text className="text-blue-600 text-xs ml-2">
+                      Location set: {parseFloat(latitude).toFixed(4)},{" "}
+                      {parseFloat(longitude).toFixed(4)}
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={clearLocation}>
+                    <Text className="text-red-600 text-xs font-semibold">
+                      Clear
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
               <Text className="text-gray-500 text-xs mt-1">
-                Enter coordinates to mark the exact location of your observation
+                Mark the exact location where you made this observation
               </Text>
             </View>
 
@@ -541,7 +759,14 @@ export default function CreateObservationForm() {
                 Photo (Optional)
               </Text>
 
-              {photo || existingPhotoUrl ? (
+              {isCompressing ? (
+                <View className="border-2 border-dashed border-gray-300 rounded-lg py-8 items-center">
+                  <ActivityIndicator size="large" color="#2563eb" />
+                  <Text className="text-gray-500 mt-2">
+                    Compressing image...
+                  </Text>
+                </View>
+              ) : photo || existingPhotoUrl ? (
                 <View className="relative">
                   <Image
                     source={{
@@ -550,7 +775,7 @@ export default function CreateObservationForm() {
                         getPhotoUrl(existingPhotoUrl) ||
                         undefined,
                     }}
-                    className="w-full h-48 rounded-lg"
+                    className="w-full h-80 rounded-lg"
                     resizeMode="cover"
                   />
                   <TouchableOpacity
@@ -610,7 +835,11 @@ export default function CreateObservationForm() {
                   <>
                     <ActivityIndicator size="small" color="white" />
                     <Text className="text-white font-bold ml-2">
-                      {isEditMode ? "Updating..." : "Creating..."}
+                      {uploadProgress > 0 && uploadProgress < 100
+                        ? `Uploading ${uploadProgress}%...`
+                        : isEditMode
+                          ? "Updating..."
+                          : "Creating..."}
                     </Text>
                   </>
                 ) : (
@@ -630,6 +859,73 @@ export default function CreateObservationForm() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Map Picker Modal */}
+      <Modal
+        visible={showMapPicker}
+        animationType="slide"
+        onRequestClose={() => setShowMapPicker(false)}
+      >
+        <SafeAreaView style={{ flex: 1 }} className="bg-white">
+          <View className="flex-1">
+            {/* Map Header */}
+            <View className="px-4 py-3 border-b border-gray-200">
+              <Text className="text-lg font-bold text-gray-800">
+                Select Observation Location
+              </Text>
+              <Text className="text-sm text-gray-500 mt-1">
+                Tap on the map to mark where you made this observation
+              </Text>
+            </View>
+
+            {/* Map View */}
+            <MapView
+              style={{ flex: 1 }}
+              region={mapRegion}
+              onRegionChangeComplete={setMapRegion}
+              onPress={handleMapPress}
+            >
+              {tempMarker && (
+                <Marker
+                  coordinate={tempMarker}
+                  title="Observation Location"
+                  pinColor="#2563eb"
+                />
+              )}
+            </MapView>
+
+            {/* Map Footer Actions */}
+            <View className="px-4 py-4 border-t border-gray-200 bg-white">
+              {tempMarker && (
+                <View className="mb-3 bg-blue-50 px-3 py-2 rounded-lg">
+                  <Text className="text-blue-600 text-xs">
+                    📍 Selected: {tempMarker.latitude.toFixed(6)},{" "}
+                    {tempMarker.longitude.toFixed(6)}
+                  </Text>
+                </View>
+              )}
+              <View className="flex-row gap-3">
+                <TouchableOpacity
+                  className="flex-1 bg-gray-200 rounded-lg py-3 items-center"
+                  onPress={() => {
+                    setShowMapPicker(false);
+                    setTempMarker(null);
+                  }}
+                >
+                  <Text className="text-gray-700 font-bold">Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  className="flex-1 bg-blue-600 rounded-lg py-3 items-center"
+                  onPress={confirmMapLocation}
+                >
+                  <Text className="text-white font-bold">Confirm Location</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }

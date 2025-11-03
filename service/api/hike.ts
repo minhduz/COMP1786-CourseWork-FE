@@ -403,3 +403,20 @@ export const getAllHikes = async (
     throw error;
   }
 };
+
+
+export const searchAllHikesByName = async (
+  name: string
+): Promise<SearchHikesResponse> => {
+  try {
+    const response = await client.get<SearchHikesResponse>(
+      "/hikes/search/all/name",
+      {
+        params: { name },
+      }
+    );
+    return response.data;
+  } catch (error: any) {
+    throw error;
+  }
+};

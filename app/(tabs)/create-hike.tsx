@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   Text,
@@ -13,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   createHike,
@@ -20,6 +22,26 @@ import {
   getHikeById,
   updateHike,
 } from "../../service/api/hike";
+
+interface LocationData {
+  latitude: number;
+  longitude: number;
+  address: string;
+}
+
+const WEATHER_OPTIONS = [
+  { label: "Sunny", icon: "weather-sunny", color: "#FDB813" },
+  { label: "Partly Cloudy", icon: "weather-partly-cloudy", color: "#90A4AE" },
+  { label: "Cloudy", icon: "weather-cloudy", color: "#78909C" },
+  { label: "Rainy", icon: "weather-rainy", color: "#42A5F5" },
+  { label: "Stormy", icon: "weather-lightning-rainy", color: "#5C6BC0" },
+  { label: "Snowy", icon: "weather-snowy", color: "#E1F5FE" },
+  { label: "Windy", icon: "weather-windy", color: "#80DEEA" },
+  { label: "Foggy", icon: "weather-fog", color: "#B0BEC5" },
+];
+
+const TRAIL_TYPES = ["Loop", "Out & Back", "Point to Point"] as const;
+type TrailType = (typeof TRAIL_TYPES)[number];
 
 export default function CreateHikeForm() {
   const router = useRouter();
@@ -32,6 +54,8 @@ export default function CreateHikeForm() {
   const [initialLoading, setInitialLoading] = useState(isEditMode);
   const [name, setName] = useState("");
   const [location, setLocation] = useState("");
+  const [locationData, setLocationData] = useState<LocationData | null>(null);
+  const [showMapPicker, setShowMapPicker] = useState(false);
   const [hikeDate, setHikeDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [parkingAvailable, setParkingAvailable] = useState(false);
@@ -42,9 +66,24 @@ export default function CreateHikeForm() {
   const [description, setDescription] = useState("");
   const [estimatedDuration, setEstimatedDuration] = useState("");
   const [elevationGain, setElevationGain] = useState("");
-  const [trailType, setTrailType] = useState("");
+  const [trailType, setTrailType] = useState<TrailType>("Loop");
   const [equipmentNeeded, setEquipmentNeeded] = useState("");
   const [weatherConditions, setWeatherConditions] = useState("");
+  const [selectedWeather, setSelectedWeather] = useState<string[]>([]);
+  const [temperature, setTemperature] = useState("");
+  const [showWeatherPicker, setShowWeatherPicker] = useState(false);
+
+  // Map state
+  const [mapRegion, setMapRegion] = useState({
+    latitude: 21.0285, // Default to Hanoi
+    longitude: 105.8542,
+    latitudeDelta: 0.0922,
+    longitudeDelta: 0.0421,
+  });
+  const [tempMarker, setTempMarker] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
 
   // Load hike data if editing
   useEffect(() => {
@@ -68,11 +107,16 @@ export default function CreateHikeForm() {
       setDescription(hike.description || "");
       setEstimatedDuration(hike.estimatedDuration || "");
       setElevationGain(hike.elevationGain?.toString() || "");
-      setTrailType(hike.trailType || "");
+
+      // Set trail type if it matches one of the options
+      if (hike.trailType && TRAIL_TYPES.includes(hike.trailType as TrailType)) {
+        setTrailType(hike.trailType as TrailType);
+      }
+
       setEquipmentNeeded(hike.equipmentNeeded || "");
       setWeatherConditions(hike.weatherConditions || "");
     } catch (error: any) {
-      console.error("Failed to load hike:", error);
+      console.log("Failed to load hike:", error);
       Alert.alert("Error", "Failed to load hike details");
       router.back();
     } finally {
@@ -85,6 +129,49 @@ export default function CreateHikeForm() {
     if (selectedDate) {
       setHikeDate(selectedDate);
     }
+  };
+
+  const handleMapPress = (event: any) => {
+    const coordinate = event.nativeEvent.coordinate;
+    setTempMarker(coordinate);
+  };
+
+  const confirmMapLocation = async () => {
+    if (tempMarker) {
+      // Here you would typically use reverse geocoding to get the address
+      // For now, we'll just use coordinates
+      const address = `${tempMarker.latitude.toFixed(6)}, ${tempMarker.longitude.toFixed(6)}`;
+
+      setLocationData({
+        latitude: tempMarker.latitude,
+        longitude: tempMarker.longitude,
+        address: address,
+      });
+      setLocation(address);
+      setShowMapPicker(false);
+      setTempMarker(null);
+    } else {
+      Alert.alert("Error", "Please tap on the map to select a location");
+    }
+  };
+
+  const handleWeatherSelection = (weather: string) => {
+    setSelectedWeather((prev) => {
+      if (prev.includes(weather)) {
+        return prev.filter((w) => w !== weather);
+      } else {
+        return [...prev, weather];
+      }
+    });
+  };
+
+  const confirmWeatherSelection = () => {
+    let weatherText = selectedWeather.join(", ");
+    if (temperature.trim()) {
+      weatherText += `, ${temperature.trim()}°C`;
+    }
+    setWeatherConditions(weatherText);
+    setShowWeatherPicker(false);
   };
 
   const validateForm = (): boolean => {
@@ -125,7 +212,7 @@ export default function CreateHikeForm() {
         elevationGain: elevationGain.trim()
           ? parseFloat(elevationGain)
           : undefined,
-        trailType: trailType.trim() || undefined,
+        trailType: trailType || undefined,
         equipmentNeeded: equipmentNeeded.trim() || undefined,
         weatherConditions: weatherConditions.trim() || undefined,
       };
@@ -150,7 +237,7 @@ export default function CreateHikeForm() {
         ]);
       }
     } catch (error: any) {
-      console.error("Failed to save hike:", error);
+      console.log("Failed to save hike:", error);
       if (error.errors) {
         const errorMessages = error.errors.map((e: any) => e.msg).join("\n");
         Alert.alert("Validation Error", errorMessages);
@@ -211,17 +298,48 @@ export default function CreateHikeForm() {
               />
             </View>
 
-            {/* Location */}
+            {/* Location with Map Option */}
             <View className="mb-4">
               <Text className="text-gray-700 font-semibold mb-2">
                 Location <Text className="text-red-500">*</Text>
               </Text>
+
+              {/* Location Input Methods */}
+              <View className="flex-row gap-2 mb-2">
+                <TouchableOpacity
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 flex-row items-center justify-center bg-gray-50"
+                  onPress={() => setShowMapPicker(true)}
+                >
+                  <MaterialCommunityIcons
+                    name="map-marker"
+                    size={18}
+                    color="#2563eb"
+                  />
+                  <Text className="text-blue-600 font-semibold ml-2 text-sm">
+                    Pick from Map
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
               <TextInput
                 className="border border-gray-300 rounded-lg px-4 py-3 text-gray-800"
-                placeholder="e.g., Nepal Himalayas"
+                placeholder="e.g., Nepal Himalayas or tap to pick from map"
                 value={location}
                 onChangeText={setLocation}
               />
+
+              {locationData && (
+                <View className="flex-row items-center mt-2 bg-blue-50 px-3 py-2 rounded-lg">
+                  <MaterialCommunityIcons
+                    name="map-marker-check"
+                    size={16}
+                    color="#2563eb"
+                  />
+                  <Text className="text-blue-600 text-xs ml-2">
+                    Location selected from map
+                  </Text>
+                </View>
+              )}
             </View>
 
             {/* Hike Date */}
@@ -295,6 +413,32 @@ export default function CreateHikeForm() {
                     </TouchableOpacity>
                   )
                 )}
+              </View>
+            </View>
+
+            {/* Trail Type */}
+            <View className="mb-4">
+              <Text className="text-gray-700 font-semibold mb-2">
+                Trail Type
+              </Text>
+              <View className="flex-row flex-wrap gap-2">
+                {TRAIL_TYPES.map((type) => (
+                  <TouchableOpacity
+                    key={type}
+                    className={`px-4 py-2 rounded-full ${
+                      trailType === type ? "bg-green-600" : "bg-gray-200"
+                    }`}
+                    onPress={() => setTrailType(type)}
+                  >
+                    <Text
+                      className={`font-semibold ${
+                        trailType === type ? "text-white" : "text-gray-700"
+                      }`}
+                    >
+                      {type}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
             </View>
 
@@ -389,19 +533,6 @@ export default function CreateHikeForm() {
               />
             </View>
 
-            {/* Trail Type */}
-            <View className="mb-4">
-              <Text className="text-gray-700 font-semibold mb-2">
-                Trail Type
-              </Text>
-              <TextInput
-                className="border border-gray-300 rounded-lg px-4 py-3 text-gray-800"
-                placeholder="e.g., Loop, Out & Back, Point to Point"
-                value={trailType}
-                onChangeText={setTrailType}
-              />
-            </View>
-
             {/* Equipment Needed */}
             <View className="mb-4">
               <Text className="text-gray-700 font-semibold mb-2">
@@ -418,14 +549,31 @@ export default function CreateHikeForm() {
               />
             </View>
 
-            {/* Weather Conditions */}
+            {/* Weather Conditions with Picker */}
             <View className="mb-6">
               <Text className="text-gray-700 font-semibold mb-2">
                 Weather Conditions
               </Text>
+
+              <View className="flex-row gap-2 mb-2">
+                <TouchableOpacity
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 flex-row items-center justify-center bg-gray-50"
+                  onPress={() => setShowWeatherPicker(true)}
+                >
+                  <MaterialCommunityIcons
+                    name="weather-partly-cloudy"
+                    size={18}
+                    color="#2563eb"
+                  />
+                  <Text className="text-blue-600 font-semibold ml-2 text-sm">
+                    Quick Select
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
               <TextInput
                 className="border border-gray-300 rounded-lg px-4 py-3 text-gray-800"
-                placeholder="e.g., Sunny, 20°C"
+                placeholder="e.g., Sunny, 20°C or use Quick Select"
                 value={weatherConditions}
                 onChangeText={setWeatherConditions}
               />
@@ -472,6 +620,161 @@ export default function CreateHikeForm() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Map Picker Modal */}
+      <Modal
+        visible={showMapPicker}
+        animationType="slide"
+        onRequestClose={() => setShowMapPicker(false)}
+      >
+        <SafeAreaView style={{ flex: 1 }} className="bg-white">
+          <View className="flex-1">
+            {/* Map Header */}
+            <View className="px-4 py-3 border-b border-gray-200">
+              <Text className="text-lg font-bold text-gray-800">
+                Select Location
+              </Text>
+              <Text className="text-sm text-gray-500 mt-1">
+                Tap on the map to choose your hiking location
+              </Text>
+            </View>
+
+            {/* Map View */}
+            <MapView
+              provider={PROVIDER_GOOGLE}
+              style={{ flex: 1 }}
+              region={mapRegion}
+              onRegionChangeComplete={setMapRegion}
+              onPress={handleMapPress}
+            >
+              {tempMarker && (
+                <Marker
+                  coordinate={tempMarker}
+                  title="Selected Location"
+                  pinColor="#2563eb"
+                />
+              )}
+            </MapView>
+
+            {/* Map Footer Actions */}
+            <View className="px-4 py-4 border-t border-gray-200 bg-white">
+              <View className="flex-row gap-3">
+                <TouchableOpacity
+                  className="flex-1 bg-gray-200 rounded-lg py-3 items-center"
+                  onPress={() => {
+                    setShowMapPicker(false);
+                    setTempMarker(null);
+                  }}
+                >
+                  <Text className="text-gray-700 font-bold">Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  className="flex-1 bg-blue-600 rounded-lg py-3 items-center"
+                  onPress={confirmMapLocation}
+                >
+                  <Text className="text-white font-bold">Confirm Location</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Weather Picker Modal */}
+      <Modal
+        visible={showWeatherPicker}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowWeatherPicker(false)}
+      >
+        <View className="flex-1 justify-end bg-black/50">
+          <View className="bg-white rounded-t-3xl" style={{ maxHeight: "80%" }}>
+            {/* Weather Picker Header */}
+            <View className="px-4 py-4 border-b border-gray-200">
+              <Text className="text-lg font-bold text-gray-800">
+                Select Weather Conditions
+              </Text>
+              <Text className="text-sm text-gray-500 mt-1">
+                Choose one or more weather conditions
+              </Text>
+            </View>
+
+            <ScrollView className="px-4 py-4">
+              {/* Weather Options */}
+              <View className="flex-row flex-wrap gap-3 mb-4">
+                {WEATHER_OPTIONS.map((weather) => {
+                  const isSelected = selectedWeather.includes(weather.label);
+                  return (
+                    <TouchableOpacity
+                      key={weather.label}
+                      className={`px-4 py-3 rounded-lg flex-row items-center ${
+                        isSelected
+                          ? "bg-blue-100 border-2 border-blue-600"
+                          : "bg-gray-100"
+                      }`}
+                      onPress={() => handleWeatherSelection(weather.label)}
+                    >
+                      <MaterialCommunityIcons
+                        name={weather.icon as any}
+                        size={24}
+                        color={isSelected ? "#2563eb" : weather.color}
+                      />
+                      <Text
+                        className={`ml-2 font-semibold ${
+                          isSelected ? "text-blue-600" : "text-gray-700"
+                        }`}
+                      >
+                        {weather.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Temperature Input */}
+              <View className="mb-4">
+                <Text className="text-gray-700 font-semibold mb-2">
+                  Temperature (Optional)
+                </Text>
+                <View className="flex-row items-center border border-gray-300 rounded-lg px-4 py-3">
+                  <TextInput
+                    className="flex-1 text-gray-800"
+                    placeholder="e.g., 20"
+                    value={temperature}
+                    onChangeText={setTemperature}
+                    keyboardType="numeric"
+                  />
+                  <Text className="text-gray-500 font-semibold">°C</Text>
+                </View>
+              </View>
+            </ScrollView>
+
+            {/* Weather Picker Footer */}
+            <View className="px-4 py-4 border-t border-gray-200">
+              <View className="flex-row gap-3">
+                <TouchableOpacity
+                  className="flex-1 bg-gray-200 rounded-lg py-3 items-center"
+                  onPress={() => {
+                    setShowWeatherPicker(false);
+                    setSelectedWeather([]);
+                    setTemperature("");
+                  }}
+                >
+                  <Text className="text-gray-700 font-bold">Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  className="flex-1 bg-blue-600 rounded-lg py-3 items-center"
+                  onPress={confirmWeatherSelection}
+                >
+                  <Text className="text-white font-bold">Apply Weather</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

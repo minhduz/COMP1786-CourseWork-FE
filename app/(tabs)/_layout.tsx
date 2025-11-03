@@ -96,7 +96,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="[id]" options={{ href: null, headerShown: false }} />
       <Tabs.Screen
         name="my-hikes"
-        options={{ href: null, title: "Hikes", headerTitle: "My Hikes" }}
+        options={{ href: null, headerShown: false }}
       />
     </Tabs>
   );

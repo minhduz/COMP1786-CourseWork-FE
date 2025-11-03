@@ -58,6 +58,16 @@ export interface GetProfileResponse {
   createdAt?: string;
 }
 
+// Get User By Username Response
+export interface GetUserByUsernameResponse {
+  userId: number;
+  username: string;
+  email: string;
+  phone?: string | null;
+  avatar?: string | null;
+  createdAt?: string;
+}
+
 // Update Profile Request
 export interface UpdateProfileRequest {
   email?: string;
@@ -193,6 +203,22 @@ export const loginUser = async (data: LoginRequest): Promise<LoginResponse> => {
 export const getProfile = async (): Promise<GetProfileResponse> => {
   try {
     const response = await client.get<GetProfileResponse>("/auth/profile");
+    return response.data;
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Get user profile by username (public)
+ */
+export const getUserByUsername = async (
+  username: string
+): Promise<GetUserByUsernameResponse> => {
+  try {
+    const response = await client.get<GetUserByUsernameResponse>(
+      `/auth/users/${username}`
+    );
     return response.data;
   } catch (error: any) {
     throw error;

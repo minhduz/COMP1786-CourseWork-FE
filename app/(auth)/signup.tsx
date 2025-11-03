@@ -70,7 +70,7 @@ const SignUpScreen = () => {
       }
     } catch (error) {
       Alert.alert("Error", "Failed to pick image");
-      console.error("Image picker error:", error);
+      console.log("Image picker error:", error);
     }
   };
 
@@ -187,7 +187,7 @@ const SignUpScreen = () => {
         Alert.alert("Error", "Sign up failed. Please try again.");
       }
 
-      console.error("Sign up error:", error);
+      console.log("Sign up error:", error);
     } finally {
       setLoading(false);
     }

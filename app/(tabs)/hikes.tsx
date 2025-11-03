@@ -8,16 +8,23 @@ import {
   Image,
   RefreshControl,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { getAllHikes, Hike } from "../../service/api/hike";
+import {
+  getAllHikes,
+  Hike,
+  searchAllHikesByName,
+} from "../../service/api/hike";
 
 export default function HikesScreen() {
   const router = useRouter();
   const [hikes, setHikes] = useState<Hike[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -28,11 +35,12 @@ export default function HikesScreen() {
   const loadHikes = async () => {
     try {
       setLoading(true);
-      // Changed from getUserHikes to getAllHikes
+      setSearchQuery(""); // Clear search when loading all hikes
+      setIsSearching(false);
       const response = await getAllHikes();
       setHikes(response.hikes);
     } catch (error: any) {
-      console.error("Failed to load hikes:", error);
+      console.log("Failed to load hikes:", error);
 
       // Handle different error types
       if (error.error) {
@@ -47,10 +55,50 @@ export default function HikesScreen() {
     }
   };
 
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) {
+      Alert.alert("Error", "Please enter a search term");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setIsSearching(true);
+      const response = await searchAllHikesByName(searchQuery.trim());
+      setHikes(response.hikes);
+
+      if (response.count === 0) {
+        Alert.alert("No Results", `No hikes found matching "${searchQuery}"`);
+      }
+    } catch (error: any) {
+      console.log("Search failed:", error);
+
+      if (error.error) {
+        Alert.alert("Error", error.error);
+      } else if (error.message) {
+        Alert.alert("Error", error.message);
+      } else {
+        Alert.alert("Error", "Failed to search hikes");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuery("");
+    setIsSearching(false);
+    loadHikes();
+  };
+
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
-    loadHikes().then(() => setRefreshing(false));
-  }, []);
+    if (isSearching && searchQuery.trim()) {
+      handleSearch().then(() => setRefreshing(false));
+    } else {
+      loadHikes().then(() => setRefreshing(false));
+    }
+  }, [isSearching, searchQuery]);
 
   const getDifficultyColor = (level: string) => {
     switch (level) {
@@ -82,7 +130,7 @@ export default function HikesScreen() {
     }
   };
 
-  if (loading) {
+  if (loading && !refreshing) {
     return (
       <View className="flex-1 justify-center items-center bg-white">
         <ActivityIndicator size="large" color="#2563eb" />
@@ -172,7 +220,57 @@ export default function HikesScreen() {
 
   return (
     <View className="flex-1 bg-white">
-      <View className="mb-4">
+      {/* Search Bar */}
+      <View className="px-6 py-4 border-b border-gray-200">
+        <View className="flex-row items-center gap-2">
+          <View className="flex-1 flex-row items-center bg-gray-100 rounded-lg px-4 py-3">
+            <MaterialCommunityIcons name="magnify" size={20} color="#6b7280" />
+            <TextInput
+              className="flex-1 ml-2 text-gray-800"
+              placeholder="Search hikes by name..."
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onSubmitEditing={handleSearch}
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery("")}>
+                <MaterialCommunityIcons
+                  name="close-circle"
+                  size={20}
+                  color="#6b7280"
+                />
+              </TouchableOpacity>
+            )}
+          </View>
+          <TouchableOpacity
+            className="bg-blue-600 rounded-lg px-4 py-3"
+            onPress={handleSearch}
+            disabled={!searchQuery.trim()}
+          >
+            <MaterialCommunityIcons name="magnify" size={20} color="white" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Clear Search Button */}
+        {isSearching && (
+          <TouchableOpacity
+            className="mt-2 flex-row items-center justify-center"
+            onPress={handleClearSearch}
+          >
+            <MaterialCommunityIcons
+              name="close-circle-outline"
+              size={16}
+              color="#2563eb"
+            />
+            <Text className="text-blue-600 font-semibold ml-1">
+              Clear Search
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <View className="flex-1">
         <FlatList
           data={hikes}
           renderItem={renderHikeItem}
@@ -183,19 +281,23 @@ export default function HikesScreen() {
           ListEmptyComponent={
             <View className="flex-1 justify-center items-center py-12">
               <MaterialCommunityIcons
-                name="map-marker-off-outline"
+                name={isSearching ? "magnify" : "map-marker-off-outline"}
                 size={48}
                 color="#d1d5db"
               />
               <Text className="text-gray-500 mt-4 text-center px-8">
-                No hikes available yet. Be the first to create one!
+                {isSearching
+                  ? `No hikes found matching "${searchQuery}"`
+                  : "No hikes available yet. Be the first to create one!"}
               </Text>
-              <TouchableOpacity
-                className="bg-blue-600 rounded-lg px-6 py-3 mt-6"
-                onPress={() => router.push("./create-hike")}
-              >
-                <Text className="text-white font-bold">Create a Hike</Text>
-              </TouchableOpacity>
+              {!isSearching && (
+                <TouchableOpacity
+                  className="bg-blue-600 rounded-lg px-6 py-3 mt-6"
+                  onPress={() => router.push("./create-hike")}
+                >
+                  <Text className="text-white font-bold">Create a Hike</Text>
+                </TouchableOpacity>
+              )}
             </View>
           }
           ListHeaderComponent={
@@ -203,11 +305,11 @@ export default function HikesScreen() {
               <View className="px-6 py-4 flex-row justify-between items-center border-b border-gray-200">
                 <View>
                   <Text className="text-xl font-bold text-gray-800">
-                    Community Hikes
+                    {isSearching ? "Search Results" : "Community Hikes"}
                   </Text>
                   <Text className="text-sm text-gray-500">
                     {hikes.length} {hikes.length === 1 ? "hike" : "hikes"}{" "}
-                    available
+                    {isSearching ? "found" : "available"}
                   </Text>
                 </View>
                 <TouchableOpacity

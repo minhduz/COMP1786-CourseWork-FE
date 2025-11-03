@@ -10,8 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { getProfile, GetProfileResponse, logout } from "../../service/api/auth";
-import { clearAuthData } from "../../service/utils/auth-utils";
+import { getProfile, GetProfileResponse } from "../../service/api/auth";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -31,7 +30,7 @@ export default function HomeScreen() {
       const profile = await getProfile();
       setUser(profile);
     } catch (error) {
-      console.error("Failed to load profile:", error);
+      console.log("Failed to load profile:", error);
       Alert.alert("Error", "Failed to load profile");
     } finally {
       setLoading(false);
@@ -42,31 +41,6 @@ export default function HomeScreen() {
     setRefreshing(true);
     loadProfile().then(() => setRefreshing(false));
   }, []);
-
-  const handleLogout = async () => {
-    Alert.alert("Logout", "Are you sure you want to logout?", [
-      {
-        text: "Cancel",
-        onPress: () => {},
-        style: "cancel",
-      },
-      {
-        text: "Logout",
-        onPress: async () => {
-          try {
-            await logout();
-            await clearAuthData();
-            // Navigate to signin using expo-router
-            router.replace("/(auth)/signin");
-          } catch (error) {
-            console.error("Logout error:", error);
-            Alert.alert("Error", "Failed to logout");
-          }
-        },
-        style: "destructive",
-      },
-    ]);
-  };
 
   if (loading) {
     return (
@@ -150,6 +124,26 @@ export default function HomeScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
+            className="bg-yellow-600 rounded-lg px-4 py-3 mb-3 flex-row items-center"
+            onPress={() => router.push("../observation/my-observation")}
+          >
+            <MaterialCommunityIcons
+              name="camera-outline"
+              size={20}
+              color="white"
+              style={{ marginRight: 8 }}
+            />
+            <Text className="text-white font-bold flex-1">
+              View My Observations
+            </Text>
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={20}
+              color="white"
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
             className="bg-green-600 rounded-lg px-4 py-3 flex-row items-center"
             onPress={() => router.push("./profile")}
           >
@@ -167,20 +161,6 @@ export default function HomeScreen() {
             />
           </TouchableOpacity>
         </View>
-
-        {/* Logout Button */}
-        <TouchableOpacity
-          className="bg-red-600 rounded-lg px-4 py-3 flex-row items-center justify-center"
-          onPress={handleLogout}
-        >
-          <MaterialCommunityIcons
-            name="logout"
-            size={20}
-            color="white"
-            style={{ marginRight: 8 }}
-          />
-          <Text className="text-white font-bold text-lg">Logout</Text>
-        </TouchableOpacity>
       </View>
     </ScrollView>
   );
