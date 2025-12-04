@@ -1,50 +1,167 @@
-# Welcome to your Expo app 👋
+# M-Hike Frontend (Expo + React Native)
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+The **M-Hike Frontend** is a cross-platform mobile hiking companion application built with **Expo**, **React Native**, and **React Navigation**. It provides an intuitive interface for managing hikes, observations, images, and GPS location while connecting to the M-Hike backend API.
 
-## Get started
+---
 
-1. Install dependencies
+## 🚀 Features
 
-   ```bash
-   npm install
-   ```
+- Cross-platform support: **Android**, **iOS**, **Web**
+- Authentication using SecureStore
+- Create, edit, delete hikes
+- Add observations with image uploads
+- GPS location using Expo Location
+- Interactive maps using `react-native-maps`
+- Bottom tab navigation + Expo Router v6
+- Modern styling using **NativeWind (TailwindCSS)**
+- API integration with Axios
 
-2. Start the app
+---
 
-   ```bash
-   npx expo start
-   ```
+## 📦 Tech Stack
 
-In the output, you'll find options to open the app in a
+### Core
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- Expo SDK 54
+- React Native 0.81
+- React 19
+- TypeScript
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+### UI & Navigation
 
-## Get a fresh project
+- Expo Router
+- React Navigation
+- NativeWind / TailwindCSS
+- Expo Vector Icons
 
-When you're ready, run:
+### Device & System APIs
 
-```bash
-npm run reset-project
+- Expo Image Picker
+- Expo Image Manipulator
+- Expo FileSystem
+- Expo Secure Store
+- Expo Location
+- Expo Haptics
+
+---
+
+## 📁 Project Structure
+
+m-hike-frontend/
+├── app/ # Screens & navigation (Expo Router)
+├── components/ # UI components
+├── hooks/ # Custom hooks
+├── assets/ # Images, fonts, icons
+├── scripts/ # Utility scripts
+├── package.json
+├── tailwind.config.js
+└── tsconfig.json
+
+---
+
+# 🛠️ How to Install & Run the M-Hike Frontend
+
+Follow these steps to teach others how to run the project.
+
+---
+
+## 1️⃣ Install Required Software
+
+Before running the app, install:
+
+- **Node.js** (v18 or newer)
+- **Expo CLI** (global)
+- **Android Studio** or **Xcode** (optional for emulators)
+
+Install Expo CLI:
+
+```sh
+npm install -g expo
+
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Download the Project (Clone from GitHub)
+git clone https://github.com/<your-username>/<your-repository>.git
+cd m-hike-frontend
 
-## Learn more
+Replace <your-username> and <your-repository> with your GitHub repo name.
 
-To learn more about developing your project with Expo, look at the following resources:
+3️⃣ Install Dependencies
+npm install
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+(You may also use yarn install)
 
-## Join the community
+4️⃣ Run the App
+Start Expo Development Server
+npm start
 
-Join our community of developers creating universal apps.
+This opens the Expo Developer Tools in your browser.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Run on Android
+npm run android
+
+Requires Android Emulator OR a real Android device with Expo Go installed.
+
+Run on iOS (macOS only)
+npm run ios
+
+Requires Xcode + iOS Simulator.
+
+Run on Web
+npm run web
+
+🔧 Optional: Environment Variables
+
+Create a .env file in the project root:
+
+API_URL=https://your-backend-url/api
+
+You can load it using your preferred method (e.g., expo-constants, react-native-dotenv).
+
+🧪 Linting & Code Quality
+
+Run ESLint check:
+
+npm run lint
+
+🐞 Common Issues & Fixes
+❌ Metro bundler stuck
+npx expo start -c
+
+❌ Android emulator not detected
+
+Open Android Studio → Device Manager → Start emulator
+
+Then run:
+
+npm run android
+
+❌ iOS build errors (Mac)
+
+Install CocoaPods:
+
+sudo gem install cocoapods
+
+Then:
+
+npx pod-install
+
+🤝 Contributing
+
+Fork the repository
+
+Create a new branch
+
+Commit changes
+
+Open a Pull Request
+
+Contributions are welcome!
+
+📄 License
+
+This project is for educational use and not intended for commercial deployment.
+
+---
+
+If you want, I can now generate the **backend Android Java README.md** in the exact same style so

@@ -203,7 +203,7 @@ export default function CreateHikeForm() {
       const hikeData: CreateHikeRequest = {
         name: name.trim(),
         location: location.trim(),
-        hikeDate: hikeDate.toISOString().split("T")[0], // Format: YYYY-MM-DD
+        hikeDate: hikeDate.toISOString().split("T")[0],
         parkingAvailable,
         length: parseFloat(length),
         difficultyLevel,
